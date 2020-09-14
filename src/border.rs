@@ -1,4 +1,3 @@
-
 /// A line around the box.
 pub const LINED: Border = Border {
     n: '─',
@@ -8,8 +7,7 @@ pub const LINED: Border = Border {
     ne: '┐',
     nw: '┌',
     se: '┘',
-    sw: '└'
-
+    sw: '└',
 };
 
 /// Only a space around the [Rect].
@@ -21,7 +19,7 @@ pub const SPACE: Border = Border {
     ne: ' ',
     nw: ' ',
     se: ' ',
-    sw: ' '
+    sw: ' ',
 };
 
 /// The style of a border.
@@ -34,6 +32,5 @@ pub struct Border {
     pub ne: char,
     pub nw: char,
     pub se: char,
-    pub sw: char
+    pub sw: char,
 }
-

@@ -2,8 +2,8 @@ use crate::border;
 use crate::layout;
 
 use std::collections::HashMap;
-use std::io::{Stdout, Write};
 use std::io::{Error, ErrorKind};
+use std::io::{Stdout, Write};
 
 /// A rectangle on the terminal
 #[derive(Clone)]
@@ -40,10 +40,10 @@ impl Rect {
                 Rect {
                     name: layout.name.clone().unwrap(),
                     position: Position {
-                        x: x+(layout.has_border as u16),
-                        y: y+(layout.has_border as u16),
-                        width: width-2*(layout.has_border as u16),
-                        height: height-2*(layout.has_border as u16),
+                        x: x + (layout.has_border as u16),
+                        y: y + (layout.has_border as u16),
+                        width: width - 2 * (layout.has_border as u16),
+                        height: height - 2 * (layout.has_border as u16),
                     },
                     has_border: layout.has_border,
                     border: layout.border.clone(),
@@ -57,11 +57,11 @@ impl Rect {
             let (r1x, r1y, r1w, r1h);
             let (r2x, r2y, r2w, r2h);
 
-            match split.direction {
-                layout::SplitDirection::HORIZONTAL => {
+            match (split.direction, split.split_type) {
+                (layout::SplitDirection::HORIZONTAL, layout::SplitType::PERCENTAGE(percentage)) => {
                     r1x = x;
                     r1y = y;
-                    r1w = (width as f32 * split.percentage) as u16;
+                    r1w = (width as f32 * percentage) as u16;
                     r1h = height;
 
                     r2x = x + r1w;
@@ -70,16 +70,68 @@ impl Rect {
                     r2h = height;
                 }
 
-                layout::SplitDirection::VERTICAL => {
+                (layout::SplitDirection::VERTICAL, layout::SplitType::PERCENTAGE(percentage)) => {
                     r1x = x;
                     r1y = y;
                     r1w = width;
-                    r1h = (height as f32 * split.percentage) as u16;
+                    r1h = (height as f32 * percentage) as u16;
 
                     r2x = x;
                     r2y = y + r1h;
                     r2w = width;
                     r2h = height - r1h;
+                }
+
+                (layout::SplitDirection::HORIZONTAL, layout::SplitType::VALUE(value)) => {
+                    if value >= 0 {
+                        let has_border = split.rects.0.has_border;
+                        r1x = x;
+                        r1y = y;
+                        r1w = value as u16 + 2 * (has_border as u16);
+                        r1h = height;
+
+                        r2x = x + r1w;
+                        r2y = y;
+                        r2w = width - r1w;
+                        r2h = height;
+                    } else {
+                        let has_border = split.rects.1.has_border;
+                        r1x = x;
+                        r1y = y;
+                        r1w = width - ((-value) as u16) - 2 * (has_border as u16);
+                        r1h = height;
+
+                        r2x = x + r1w;
+                        r2y = y;
+                        r2w = (-value) as u16 + 2 * (has_border as u16);
+                        r2h = height;
+                    }
+                }
+
+                (layout::SplitDirection::VERTICAL, layout::SplitType::VALUE(value)) => {
+                    if value >= 0 {
+                        let has_border = split.rects.0.has_border;
+                        r1x = x;
+                        r1y = y;
+                        r1w = width;
+                        r1h = value as u16 + 2 * (has_border as u16);
+
+                        r2x = x;
+                        r2y = y + r1h;
+                        r2w = width;
+                        r2h = height - r1h;
+                    } else {
+                        let has_border = split.rects.1.has_border;
+                        r1x = x;
+                        r1y = y;
+                        r1w = width;
+                        r1h = height - ((-value) as u16) - 2 * (has_border as u16);
+
+                        r2x = x;
+                        r2y = y + r1h;
+                        r2w = width;
+                        r2h = (-value) as u16 + 2 * (has_border as u16);
+                    }
                 }
             }
 
@@ -92,6 +144,14 @@ impl Rect {
         }
 
         return HashMap::new();
+    }
+
+    pub fn from_layout_whole(layout: &layout::Layout) -> HashMap<String, Rect> {
+        let termsize = termion::terminal_size().ok();
+        let termwidth = termsize.map(|(w, _)| w).unwrap_or(70);
+        let termheight = termsize.map(|(_, h)| h).unwrap_or(40);
+        return Rect::from_layout(layout, 1, 1, termwidth, termheight);
+
     }
 
     /// Shows the writeable box of the [Rect] on the screen.
@@ -193,29 +253,83 @@ impl Rect {
     }
 
     /// Write a string to the screen at the given positions.
-    /// The positinos are (0,0)-based.
+    /// The positions are (0,0)-based.
     /// If the string is to long to fit in the line it will be wrapped.
     /// If the string will not fit in the border a [Error] will be returned and nothing will be written.
     pub fn write(&self, stdout: &mut Stdout, str: &str, x: u16, y: u16) -> Result<(), Error> {
-        if y>self.position.height {
-            return Err(Error::new(ErrorKind::Other,"Position out of bounds"));
+        self.show_border(stdout);
+        if y > self.position.height {
+            return Err(Error::new(ErrorKind::Other, "Position out of bounds"));
         }
 
         let overflow = (x as i16) + (str.len() as i16) - (self.position.width as i16);
 
         // Overflow to next line
         if overflow > 0 {
-            let thisline = &str[..(str.len()-overflow as usize)];
-            let nextline = &str[(str.len()-overflow as usize)..];
+            let thisline = &str[..(str.len() - overflow as usize)];
+            let nextline = &str[(str.len() - overflow as usize)..];
             self.write(stdout, thisline, x, y).unwrap();
-            return self.write(stdout, nextline, 0, y+1);
+            return self.write(stdout, nextline, 0, y + 1);
         }
 
         // No overflow
-        return write!(stdout, "{}{}", termion::cursor::Goto(self.position.x+x, self.position.y+y), str);
+        return write!(
+            stdout,
+            "{}{}",
+            termion::cursor::Goto(self.position.x + x, self.position.y + y),
+            str
+        );
     }
 
+    /// Equivalent to write, but when the line cannot hold the whole string, the rest will be
+    /// replaced with '...' so it can fit in one line.
+    pub fn write_trimmed(
+        &self,
+        stdout: &mut Stdout,
+        str: &str,
+        x: u16,
+        y: u16,
+    ) -> Result<(), Error> {
+        self.show_border(stdout);
+        if y > self.position.height {
+            return Err(Error::new(ErrorKind::Other, "Position out of bounds"));
+        }
+
+        let overflow = (x as i16) + (str.len() as i16) - (self.position.width as i16);
+
+        // Overflow, the string must be shortened.
+        if overflow > 0 {
+            let shortened = &str[..((str.len() - overflow as usize) - 3)];
+            return write!(
+                stdout,
+                "{}{}...",
+                termion::cursor::Goto(self.position.x + x, self.position.y + y),
+                shortened
+            );
+        }
+
+        // No overflow
+        return write!(
+            stdout,
+            "{}{}",
+            termion::cursor::Goto(self.position.x + x, self.position.y + y),
+            str
+        );
+    }
+
+    /// Get the dimensions of the [Rect]. The tupel consists is ordered (width, height).
     pub fn get_dimensions(&self) -> (u16, u16) {
         return (self.position.width, self.position.height);
+    }
+
+    /// Clears the entire rectangle.
+    pub fn clear(&self, stdout: &mut Stdout) {
+        self.write(
+            stdout,
+            &" ".repeat((self.position.width * self.position.height) as usize),
+            0,
+            0,
+        )
+        .unwrap();
     }
 }
