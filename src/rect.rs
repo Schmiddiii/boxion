@@ -3,7 +3,7 @@ use crate::layout;
 
 use std::collections::HashMap;
 use std::io::{Error, ErrorKind};
-use std::io::{Stdout, Write};
+use std::io::Write;
 
 /// A rectangle on the terminal
 #[derive(Clone)]
@@ -155,7 +155,7 @@ impl Rect {
     }
 
     /// Shows the writeable box of the [Rect] on the screen.
-    pub fn show(&self, stdout: &mut Stdout) {
+    pub fn show(&self, stdout: &mut dyn Write) {
         let pos = self.position.clone();
         write!(stdout, "{}┌", termion::cursor::Goto(pos.x, pos.y)).unwrap();
         write!(
@@ -179,7 +179,7 @@ impl Rect {
     }
 
     // Shows the [Border] of the [Rect] if existent.
-    pub fn show_border(&self, stdout: &mut Stdout) {
+    pub fn show_border(&self, stdout: &mut dyn Write) {
         if !self.has_border || self.border.is_none() {
             return;
         }
@@ -256,7 +256,12 @@ impl Rect {
     /// The positions are (0,0)-based.
     /// If the string is to long to fit in the line it will be wrapped.
     /// If the string will not fit in the border a [Error] will be returned and nothing will be written.
-    pub fn write(&self, stdout: &mut Stdout, str: &str, x: u16, y: u16) -> Result<(), Error> {
+    pub fn write(&self, stdout: &mut dyn Write, str: &str, x: u16, y: u16) -> Result<(), Error> {
+        return self.write_colored(stdout, str, x, y, &termion::color::Reset, &termion::color::Reset);
+    }
+
+    /// Equivalent to [Rect.write] but with color.
+    pub fn write_colored(&self, stdout: &mut dyn Write, str: &str, x: u16, y: u16, fg_color: &dyn termion::color::Color, bg_color: &dyn termion::color::Color) -> Result<(), Error> {
         self.show_border(stdout);
         if y > self.position.height {
             return Err(Error::new(ErrorKind::Other, "Position out of bounds"));
@@ -268,27 +273,32 @@ impl Rect {
         if overflow > 0 {
             let thisline = &str[..(str.len() - overflow as usize)];
             let nextline = &str[(str.len() - overflow as usize)..];
-            self.write(stdout, thisline, x, y).unwrap();
+            self.write_colored(stdout, thisline, x, y, fg_color, bg_color).unwrap();
             return self.write(stdout, nextline, 0, y + 1);
         }
 
         // No overflow
         return write!(
             stdout,
-            "{}{}",
+            "{}{}{}{}{}{}",
+            termion::color::Fg(fg_color),
+            termion::color::Bg(bg_color),
             termion::cursor::Goto(self.position.x + x, self.position.y + y),
-            str
+            str,
+            termion::color::Fg(termion::color::Reset),
+            termion::color::Bg(termion::color::Reset),
         );
+
     }
 
     /// Equivalent to write, but when the line cannot hold the whole string, the rest will be
     /// replaced with '...' so it can fit in one line.
     pub fn write_trimmed(
         &self,
-        stdout: &mut Stdout,
+        stdout: &mut dyn Write,
         str: &str,
         x: u16,
-        y: u16,
+        y: u16
     ) -> Result<(), Error> {
         self.show_border(stdout);
         if y > self.position.height {
@@ -317,13 +327,54 @@ impl Rect {
         );
     }
 
+    /// Equivalent to write_trimmed but with colors.
+    pub fn write_colored_trimmed(
+        &self,
+        stdout: &mut dyn Write,
+        str: &str,
+        x: u16,
+        y: u16,
+        fg_color: &dyn termion::color::Color,
+        bg_color: &dyn termion::color::Color
+    ) -> Result<(), Error> {
+        self.show_border(stdout);
+        if y > self.position.height {
+            return Err(Error::new(ErrorKind::Other, "Position out of bounds"));
+        }
+
+        let overflow = (x as i16) + (str.len() as i16) - (self.position.width as i16);
+
+        // Overflow, the string must be shortened.
+        if overflow > 0 {
+            let shortened = &str[..((str.len() - overflow as usize) - 3)];
+            return write!(
+                stdout,
+                "{}{}...",
+                termion::cursor::Goto(self.position.x + x, self.position.y + y),
+                shortened
+            );
+        }
+
+        // No overflow
+        return write!(
+            stdout,
+            "{}{}{}{}{}{}",
+            termion::color::Fg(fg_color),
+            termion::color::Bg(bg_color),
+            termion::cursor::Goto(self.position.x + x, self.position.y + y),
+            str,
+            termion::color::Fg(termion::color::Reset),
+            termion::color::Bg(termion::color::Reset)
+        );
+    }
+
     /// Get the dimensions of the [Rect]. The tupel consists is ordered (width, height).
     pub fn get_dimensions(&self) -> (u16, u16) {
         return (self.position.width, self.position.height);
     }
 
     /// Clears the entire rectangle.
-    pub fn clear(&self, stdout: &mut Stdout) {
+    pub fn clear(&self, stdout: &mut dyn Write) {
         self.write(
             stdout,
             &" ".repeat((self.position.width * self.position.height) as usize),
