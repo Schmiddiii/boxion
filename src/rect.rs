@@ -2,8 +2,8 @@ use crate::border;
 use crate::layout;
 
 use std::collections::HashMap;
-use std::io::{Error, ErrorKind};
 use std::io::Write;
+use std::io::{Error, ErrorKind};
 
 /// A rectangle on the terminal
 #[derive(Clone)]
@@ -151,7 +151,6 @@ impl Rect {
         let termwidth = termsize.map(|(w, _)| w).unwrap_or(70);
         let termheight = termsize.map(|(_, h)| h).unwrap_or(40);
         return Rect::from_layout(layout, 1, 1, termwidth, termheight);
-
     }
 
     /// Shows the writeable box of the [Rect] on the screen.
@@ -257,11 +256,26 @@ impl Rect {
     /// If the string is to long to fit in the line it will be wrapped.
     /// If the string will not fit in the border a [Error] will be returned and nothing will be written.
     pub fn write(&self, stdout: &mut dyn Write, str: &str, x: u16, y: u16) -> Result<(), Error> {
-        return self.write_colored(stdout, str, x, y, &termion::color::Reset, &termion::color::Reset);
+        return self.write_colored(
+            stdout,
+            str,
+            x,
+            y,
+            &termion::color::Reset,
+            &termion::color::Reset,
+        );
     }
 
     /// Equivalent to [Rect.write] but with color.
-    pub fn write_colored(&self, stdout: &mut dyn Write, str: &str, x: u16, y: u16, fg_color: &dyn termion::color::Color, bg_color: &dyn termion::color::Color) -> Result<(), Error> {
+    pub fn write_colored(
+        &self,
+        stdout: &mut dyn Write,
+        str: &str,
+        x: u16,
+        y: u16,
+        fg_color: &dyn termion::color::Color,
+        bg_color: &dyn termion::color::Color,
+    ) -> Result<(), Error> {
         self.show_border(stdout);
         if y > self.position.height {
             return Err(Error::new(ErrorKind::Other, "Position out of bounds"));
@@ -273,7 +287,8 @@ impl Rect {
         if overflow > 0 {
             let thisline = &str[..(str.len() - overflow as usize)];
             let nextline = &str[(str.len() - overflow as usize)..];
-            self.write_colored(stdout, thisline, x, y, fg_color, bg_color).unwrap();
+            self.write_colored(stdout, thisline, x, y, fg_color, bg_color)
+                .unwrap();
             return self.write(stdout, nextline, 0, y + 1);
         }
 
@@ -288,7 +303,6 @@ impl Rect {
             termion::color::Fg(termion::color::Reset),
             termion::color::Bg(termion::color::Reset),
         );
-
     }
 
     /// Equivalent to write, but when the line cannot hold the whole string, the rest will be
@@ -298,7 +312,7 @@ impl Rect {
         stdout: &mut dyn Write,
         str: &str,
         x: u16,
-        y: u16
+        y: u16,
     ) -> Result<(), Error> {
         self.show_border(stdout);
         if y > self.position.height {
@@ -335,7 +349,7 @@ impl Rect {
         x: u16,
         y: u16,
         fg_color: &dyn termion::color::Color,
-        bg_color: &dyn termion::color::Color
+        bg_color: &dyn termion::color::Color,
     ) -> Result<(), Error> {
         self.show_border(stdout);
         if y > self.position.height {
