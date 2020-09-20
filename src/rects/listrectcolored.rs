@@ -47,6 +47,10 @@ impl<'a, T: Clone> ListRectColored<'a, T> {
     pub fn show(&self, stdout: &mut dyn Write) {
         self.rect.show_border(stdout);
         for (index, element) in self.elements.iter().enumerate() {
+            if index >= self.rect.get_dimensions().1 as usize {
+                return;
+            }
+
             let (fg_color, bg_color) =
                 (self.theme)(element.0.clone(), index as u16 == self.selected);
             self.rect
