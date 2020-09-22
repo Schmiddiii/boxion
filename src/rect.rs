@@ -254,7 +254,7 @@ impl Rect {
     /// Write a string to the screen at the given positions.
     /// The positions are (0,0)-based.
     /// If the string is to long to fit in the line it will be wrapped.
-    /// If the string will not fit in the border a [Error] will be returned and nothing will be written.
+    /// If the string will not fit in the rect a [Error] will be returned and nothing will be written.
     pub fn write(&self, stdout: &mut dyn Write, str: &str, x: u16, y: u16) -> Result<(), Error> {
         return self.write_colored(
             stdout,
@@ -289,7 +289,7 @@ impl Rect {
             let nextline = &str[(str.len() - overflow as usize)..];
             self.write_colored(stdout, thisline, x, y, fg_color, bg_color)
                 .unwrap();
-            return self.write(stdout, nextline, 0, y + 1);
+            return self.write_colored(stdout, nextline, 0, y + 1, fg_color, bg_color);
         }
 
         // No overflow
@@ -314,31 +314,7 @@ impl Rect {
         x: u16,
         y: u16,
     ) -> Result<(), Error> {
-        self.show_border(stdout);
-        if y > self.position.height {
-            return Err(Error::new(ErrorKind::Other, "Position out of bounds"));
-        }
-
-        let overflow = (x as i16) + (str.len() as i16) - (self.position.width as i16);
-
-        // Overflow, the string must be shortened.
-        if overflow > 0 {
-            let shortened = &str[..((str.len() - overflow as usize) - 3)];
-            return write!(
-                stdout,
-                "{}{}...",
-                termion::cursor::Goto(self.position.x + x, self.position.y + y),
-                shortened
-            );
-        }
-
-        // No overflow
-        return write!(
-            stdout,
-            "{}{}",
-            termion::cursor::Goto(self.position.x + x, self.position.y + y),
-            str
-        );
+       return self.write_colored_trimmed(stdout, str, x, y, &termion::color::Reset, &termion::color::Reset);
     }
 
     /// Equivalent to write_trimmed but with colors.
@@ -351,12 +327,16 @@ impl Rect {
         fg_color: &dyn termion::color::Color,
         bg_color: &dyn termion::color::Color,
     ) -> Result<(), Error> {
+
+        // Replace tabs
+        let str = &String::from(str).replace('\t', "    ");
+
         self.show_border(stdout);
         if y > self.position.height {
             return Err(Error::new(ErrorKind::Other, "Position out of bounds"));
         }
 
-        let overflow = (x as i16) + (str.len() as i16) - (self.position.width as i16);
+        let overflow = (x as isize) + (str.len() as isize) - (self.position.width as isize);
 
         // Overflow, the string must be shortened.
         if overflow > 0 {
@@ -380,6 +360,16 @@ impl Rect {
             termion::color::Fg(termion::color::Reset),
             termion::color::Bg(termion::color::Reset)
         );
+    }
+
+    /// Write a single line and fill the rest with spaces
+    pub fn write_colored_trimmed_line(&self, stdout: &mut dyn Write, str: &str, y: u16, fg_color: &dyn termion::color::Color, bg_color: &dyn termion::color::Color) -> Result<(), Error> {
+        self.write_colored_trimmed(stdout, str, 0, y, fg_color, bg_color)?;
+        if str.len() < self.position.width as usize {
+            self.write(stdout, &" ".repeat(self.position.width as usize - str.len()), str.len() as u16, y)?;
+        }
+        Ok(())
+
     }
 
     /// Get the dimensions of the [Rect]. The tupel consists is ordered (width, height).
